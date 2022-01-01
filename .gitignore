@@ -3,3 +3,5 @@ Configurations.py
 __pycache__/Configurations.cpython-37.pyc
 Output/tweets.csv
 Configurations.pyc
+*.csv
+*.pyc
