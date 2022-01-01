@@ -5,17 +5,22 @@ Main source of info: https://github.com/twitterdev/getting-started-with-the-twit
 from Configurations import API_KEY, API_SECRET_KEY, BEARER_TOEKN, ACCESS_TOKEN_KEY, ACCESS_TOKEN_SECRET
 
 from twarc import Twarc2, expansions
-from os import listdir
 from os.path import isfile, join
+from dateutil import parser
 from pprint import pprint
+from os import listdir
 
 import pandas as pd
 
+import datetime
 import json
+import pytz
 import csv
 
 TWEET_IDS_FOLDER_PATH = "./TweetIds/"
 OUTPUT_FOLDER_PATH = "./Output/"
+TWEETS_TO_UPDATE = 5000
+TWEETS_PER_FILE = 250000
 
 def loadTweetIds(path=TWEET_IDS_FOLDER_PATH):
     print("Loading tweet IDs...")
@@ -42,41 +47,58 @@ def loadTweetIds(path=TWEET_IDS_FOLDER_PATH):
 def initializeClient():
 	return Twarc2(bearer_token=BEARER_TOEKN)
 
-def saveTweetsToCsv(tweets):
+def saveTweetsToCsv(tweets, file_name="tweets.csv"):
+    print("Saving tweets...")
+
     tweet_df = pd.DataFrame(tweets)
-    tweet_df.to_csv(
-        OUTPUT_FOLDER_PATH + "tweets.csv",
-        sep=',',
-        index=False,
-        quoting=csv.QUOTE_ALL)
+    file_path = OUTPUT_FOLDER_PATH + file_name
+
+    if isfile(file_path):
+        tweet_df.to_csv(
+            file_path,
+            sep=',',
+            index=False,
+            mode='a',
+            header=False,
+            quoting=csv.QUOTE_ALL)
+    else:
+        tweet_df.to_csv(
+            file_path,
+            sep=',',
+            index=False,
+            quoting=csv.QUOTE_ALL)
+    
+    print("Tweets have been saved.")
 
 def main():
-    tweet_ids = loadTweetIds()
+    total_tweet_count = 0
+    file_count = 0
 
-    # Readying the Twitter client to interface
-    # Note:
     client = initializeClient()
-    lookup = client.tweet_lookup(tweet_ids=tweet_ids[:1000])
+    lookup = client.tweet_lookup(tweet_ids=loadTweetIds()[total_tweet_count:])
 
-    # Here is where all results are placed. Kindly modify this
-    # so that you can save the tweets to your own machine. In its
-    # current form, this simply takes all tweets and saves some 
-    # information to a tweet
     tweets = []
     for page in lookup:
-        # This returns a list of tweets
         result = expansions.flatten(page)
-        # For each tweet that was found, add it to a list. For
-        # this example, I'm only taking the text and when the tweet
-        # was created at.
         for tweet in result:
             tweets.append({
-                'text': tweet['text'],
-                'created_at': tweet['created_at']
+                'tweet_id': tweet['id'],
+                'author_id': tweet['author_id'],
+                'created_at_utc+8': datetime.datetime.strftime(
+                    parser.parse(tweet['created_at'])
+                            .replace(tzinfo=pytz.utc)
+                            .astimezone(pytz.timezone('Asia/Manila')), 
+                    "%Y-%m-%d %H:%M:%S"),
+                'lang': tweet['lang'],
+                'text': tweet['text']
                 })
 
-    # Save tweets to a CSV file
-    saveTweetsToCsv(tweets)
+            total_tweet_count += 1
+            if total_tweet_count % TWEETS_TO_UPDATE == 0:
+                saveTweetsToCsv(tweets, "tweets_" + str(file_count) + ".csv")
+                tweets = []
+                if total_tweet_count % TWEETS_PER_FILE == 0:
+                    file_count += 1
 
 if __name__ == "__main__":
     main()
